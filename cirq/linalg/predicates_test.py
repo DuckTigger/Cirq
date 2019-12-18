@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import cmath
-
 import numpy as np
+import pytest
 
 import cirq
 
@@ -294,24 +294,14 @@ def test_is_special_unitary_tolerance():
 
 
 def test_commutes():
-    assert cirq.commutes(
-        np.empty((0, 0)),
-        np.empty((0, 0)))
-    assert not cirq.commutes(
-        np.empty((1, 0)),
-        np.empty((0, 1)))
-    assert not cirq.commutes(
-        np.empty((0, 1)),
-        np.empty((1, 0)))
-    assert not cirq.commutes(
-        np.empty((1, 0)),
-        np.empty((1, 0)))
-    assert not cirq.commutes(
-        np.empty((0, 1)),
-        np.empty((0, 1)))
+    assert cirq.linalg.commutes(np.empty((0, 0)), np.empty((0, 0)))
+    assert not cirq.linalg.commutes(np.empty((1, 0)), np.empty((0, 1)))
+    assert not cirq.linalg.commutes(np.empty((0, 1)), np.empty((1, 0)))
+    assert not cirq.linalg.commutes(np.empty((1, 0)), np.empty((1, 0)))
+    assert not cirq.linalg.commutes(np.empty((0, 1)), np.empty((0, 1)))
 
-    assert cirq.commutes(np.array([[1]]), np.array([[2]]))
-    assert cirq.commutes(np.array([[1]]), np.array([[0]]))
+    assert cirq.linalg.commutes(np.array([[1]]), np.array([[2]]))
+    assert cirq.linalg.commutes(np.array([[1]]), np.array([[0]]))
 
     x = np.array([[0, 1], [1, 0]])
     y = np.array([[0, -1j], [1j, 0]])
@@ -319,15 +309,15 @@ def test_commutes():
     xx = np.kron(x, x)
     zz = np.kron(z, z)
 
-    assert cirq.commutes(x, x)
-    assert cirq.commutes(y, y)
-    assert cirq.commutes(z, z)
-    assert not cirq.commutes(x, y)
-    assert not cirq.commutes(x, z)
-    assert not cirq.commutes(y, z)
+    assert cirq.linalg.commutes(x, x)
+    assert cirq.linalg.commutes(y, y)
+    assert cirq.linalg.commutes(z, z)
+    assert not cirq.linalg.commutes(x, y)
+    assert not cirq.linalg.commutes(x, z)
+    assert not cirq.linalg.commutes(y, z)
 
-    assert cirq.commutes(xx, zz)
-    assert cirq.commutes(xx, np.diag([1, -1, -1, 1 + 1e-9]))
+    assert cirq.linalg.commutes(xx, zz)
+    assert cirq.linalg.commutes(xx, np.diag([1, -1, -1, 1 + 1e-9]))
 
 
 def test_commutes_tolerance():
@@ -337,8 +327,8 @@ def test_commutes_tolerance():
     z = np.array([[1, 0], [0, -1]])
 
     # Pays attention to specified tolerance.
-    assert cirq.commutes(x, x + z * 0.1, atol=atol)
-    assert not cirq.commutes(x, x + z * 0.5, atol=atol)
+    assert cirq.linalg.commutes(x, x + z * 0.1, atol=atol)
+    assert not cirq.linalg.commutes(x, x + z * 0.5, atol=atol)
 
 
 def test_allclose_up_to_global_phase():
@@ -412,3 +402,77 @@ def test_binary_sub_tensor_slice():
     assert cirq.slice_for_qubits_equal_to([1], 0b0, num_qubits=2) == (a, 0)
     assert cirq.slice_for_qubits_equal_to([1], 0b0, num_qubits=3) == (a, 0, a)
     assert cirq.slice_for_qubits_equal_to([2], 0b0, num_qubits=3) == (a, a, 0)
+
+
+def test_binary_sub_tensor_slice_big_endian():
+    a = slice(None)
+    e = Ellipsis
+    sfqet = cirq.slice_for_qubits_equal_to
+
+    assert sfqet([], big_endian_qureg_value=0) == (e,)
+    assert sfqet([0], big_endian_qureg_value=0b0) == (0, e)
+    assert sfqet([0], big_endian_qureg_value=0b1) == (1, e)
+    assert sfqet([1], big_endian_qureg_value=0b0) == (a, 0, e)
+    assert sfqet([1], big_endian_qureg_value=0b1) == (a, 1, e)
+    assert sfqet([2], big_endian_qureg_value=0b0) == (a, a, 0, e)
+    assert sfqet([2], big_endian_qureg_value=0b1) == (a, a, 1, e)
+
+    assert sfqet([0, 1], big_endian_qureg_value=0b00) == (0, 0, e)
+    assert sfqet([1, 2], big_endian_qureg_value=0b00) == (a, 0, 0, e)
+    assert sfqet([1, 3], big_endian_qureg_value=0b00) == (a, 0, a, 0, e)
+    assert sfqet([1, 3], big_endian_qureg_value=0b01) == (a, 0, a, 1, e)
+    assert sfqet([3, 1], big_endian_qureg_value=0b01) == (a, 1, a, 0, e)
+
+    assert sfqet([2, 1, 0], big_endian_qureg_value=0b100) == (0, 0, 1, e)
+    assert sfqet([2, 1, 0], big_endian_qureg_value=0b010) == (0, 1, 0, e)
+    assert sfqet([2, 1, 0], big_endian_qureg_value=0b001) == (1, 0, 0, e)
+    assert sfqet([0, 1, 2], big_endian_qureg_value=0b101) == (1, 0, 1, e)
+    assert sfqet([0, 2, 1], big_endian_qureg_value=0b101) == (1, 1, 0, e)
+
+    m = np.array([0] * 16).reshape((2, 2, 2, 2))
+    for k in range(16):
+        m[sfqet([0, 1, 2, 3], big_endian_qureg_value=k)] = k
+    assert list(m.reshape(16)) == list(range(16))
+
+    assert sfqet([0], big_endian_qureg_value=0b1, num_qubits=1) == (1,)
+    assert sfqet([1], big_endian_qureg_value=0b0, num_qubits=2) == (a, 0)
+    assert sfqet([1], big_endian_qureg_value=0b0, num_qubits=3) == (a, 0, a)
+    assert sfqet([2], big_endian_qureg_value=0b0, num_qubits=3) == (a, a, 0)
+
+
+def test_qudit_sub_tensor_slice():
+    a = slice(None)
+    sfqet = cirq.slice_for_qubits_equal_to
+
+    assert sfqet([], 0, qid_shape=()) == ()
+    assert sfqet([0], 0, qid_shape=(3,)) == (0,)
+    assert sfqet([0], 1, qid_shape=(3,)) == (1,)
+    assert sfqet([0], 2, qid_shape=(3,)) == (2,)
+    assert sfqet([2], 0, qid_shape=(1, 2, 3)) == (a, a, 0)
+    assert sfqet([2], 2, qid_shape=(1, 2, 3)) == (a, a, 2)
+    assert sfqet([2], big_endian_qureg_value=2,
+                 qid_shape=(1, 2, 3)) == (a, a, 2)
+
+    assert sfqet([1, 3], 3 * 2 + 1, qid_shape=(2, 3, 4, 5)) == (a, 1, a, 2)
+    assert sfqet([3, 1], 5 * 2 + 1, qid_shape=(2, 3, 4, 5)) == (a, 2, a, 1)
+    assert sfqet([2, 1, 0], 9 * 2 + 3 * 1, qid_shape=(3,) * 3) == (2, 1, 0)
+    assert sfqet([1, 3],
+                 big_endian_qureg_value=5 * 1 + 2,
+                 qid_shape=(2, 3, 4, 5)) == (a, 1, a, 2)
+    assert sfqet([3, 1],
+                 big_endian_qureg_value=3 * 1 + 2,
+                 qid_shape=(2, 3, 4, 5)) == (a, 2, a, 1)
+
+    m = np.array([0] * 24).reshape((1, 2, 3, 4))
+    for k in range(24):
+        m[sfqet([3, 2, 1, 0], k, qid_shape=(1, 2, 3, 4))] = k
+    assert list(m.reshape(24)) == list(range(24))
+
+    assert sfqet([0], 1, num_qubits=1, qid_shape=(3,)) == (1,)
+    assert sfqet([1], 0, num_qubits=3, qid_shape=(3, 3, 3)) == (a, 0, a)
+
+    with pytest.raises(ValueError, match='len.* !='):
+        sfqet([], num_qubits=2, qid_shape=(1, 2, 3))
+
+    with pytest.raises(ValueError, match='exactly one'):
+        sfqet([0, 1, 2], 0b101, big_endian_qureg_value=0b101)
